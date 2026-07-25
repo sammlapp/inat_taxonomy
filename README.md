@@ -1,6 +1,11 @@
 # iNat Taxonomy for python and polars
 Utilities for accessing the iNaturalist taxonomy via polars dataframes
 
+### Install:
+```bash
+pip install git+https://github.com/sammlapp/inat_taxonomy.git
+```
+
 ### Usage:
 ```python
 

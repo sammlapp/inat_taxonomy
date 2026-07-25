@@ -1,27 +1,53 @@
 import polars as pl
 from pathlib import Path
+from platformdirs import user_cache_dir
 
-TAXONOMY = pl.read_parquet("../data/cleaned_taxa.parquet")
+_PACKAGE_DATA_DIR = Path(__file__).parent / "data"
+_BUNDLED_PARQUET = _PACKAGE_DATA_DIR / "cleaned_taxa.parquet"
+
+_CACHE_DIR = Path(user_cache_dir("inat_taxonomy"))
+_DWCA_DIR = _CACHE_DIR / "inaturalist-taxonomy.dwca"
+_DWCA_ZIP_URL = "https://www.inaturalist.org/taxa/inaturalist-taxonomy.dwca.zip"
+
+TAXONOMY = pl.read_parquet(_BUNDLED_PARQUET)
 
 
 def _download_taxonomy(force: bool = False) -> None:
     """
-    Download the iNaturalist taxonomy data if it does not exist.
+    Download the full iNaturalist taxonomy DWCA archive (used for vernacular
+    names and re-generating the cleaned taxonomy) into the user cache
+    directory, if it does not already exist.
     """
-    import os
-    import subprocess
+    import shutil
+    import urllib.request
+    import zipfile
 
-    if force or not os.path.exists("../data/inaturalist-taxonomy.dwca/taxa.csv"):
-        subprocess.run(["bash", "scripts/download_taxonomy.sh"])
+    if not force and (_DWCA_DIR / "taxa.csv").exists():
+        return
+
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    if _DWCA_DIR.exists():
+        shutil.rmtree(_DWCA_DIR)
+
+    zip_path = _CACHE_DIR / "inaturalist-taxonomy.dwca.zip"
+    urllib.request.urlretrieve(_DWCA_ZIP_URL, zip_path)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(_DWCA_DIR)
+    zip_path.unlink()
 
 
 def update_taxonomy() -> None:
     """
     Update the taxonomy data by re-downloading and re-processing the iNaturalist taxonomy data.
+
+    This overwrites the bundled taxonomy data used for the module-level
+    TAXONOMY dataframe in the currently installed package.
     """
+    global TAXONOMY
+
     _download_taxonomy(force=True)
     # read full taxonomy
-    df = pl.read_csv("../data/inaturalist-taxonomy.dwca/taxa.csv")
+    df = pl.read_csv(_DWCA_DIR / "taxa.csv")
 
     # discard heavy columns with urls and other metadata
     df = df[
@@ -40,7 +66,8 @@ def update_taxonomy() -> None:
         ]
     ]
     # save efficiently
-    df.write_parquet("../data/cleaned_taxa.parquet", compression="zstd")
+    df.write_parquet(_BUNDLED_PARQUET, compression="zstd")
+    TAXONOMY = df
 
 
 def list_lexicons(normalize: bool = False) -> list[str]:
@@ -48,9 +75,7 @@ def list_lexicons(normalize: bool = False) -> list[str]:
     List all available lexicons in the vernacular names data.
     """
     _download_taxonomy()
-    lexicon_files = Path("../data/inaturalist-taxonomy.dwca").glob(
-        "VernacularNames-*.csv"
-    )
+    lexicon_files = _DWCA_DIR.glob("VernacularNames-*.csv")
     lexicons = [Path(f).stem.replace("VernacularNames-", "") for f in lexicon_files]
     if normalize:
         lexicons = [
@@ -80,6 +105,8 @@ def add_vernacular_names(lexicon: str, taxonomy: pl.DataFrame = None) -> pl.Data
         vernacular names from the specified lexicon.
 
     """
+    _download_taxonomy()
+
     # normalize lexicon to lowercase alphanumeric
     lexicon = "".join(filter(str.isalnum, lexicon.lower()))
     assert lexicon in list_lexicons(
@@ -87,9 +114,7 @@ def add_vernacular_names(lexicon: str, taxonomy: pl.DataFrame = None) -> pl.Data
     ), f"Lexicon '{lexicon}' not found. Use list_lexicons() for available lexicons."
 
     # read vernacular names
-    df_vernacular = pl.read_csv(
-        f"../data/inaturalist-taxonomy.dwca/VernacularNames-{lexicon}.csv"
-    )
+    df_vernacular = pl.read_csv(_DWCA_DIR / f"VernacularNames-{lexicon}.csv")
     # select relevant columns
     df_vernacular = df_vernacular.select(["id", "vernacularName"])
 

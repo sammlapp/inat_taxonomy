@@ -1,4 +1,4 @@
-from taxonomy import (
+from inat_taxonomy.taxonomy import (
     TAXONOMY,
     id_to_sp,
     sp_to_id,
