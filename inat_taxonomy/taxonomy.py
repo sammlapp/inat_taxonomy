@@ -229,3 +229,40 @@ def sp_to_level(scientific_names: list[str], level: str) -> str:
         .get_column(level)
         .to_list()
     )
+
+
+def vernacular_names(scientific_names: list[str], lexicon: str) -> list[str]:
+    """
+    Get FIRST vernacular name entry for each scientific name
+
+    Args:
+        scientific_names (list[str]): List of scientific names.
+        lexicon (str): The lexicon (language) to retrieve vernacular names from.
+            Check available lexicons with list_lexicons().
+
+    Returns:
+        list[str]: List of vernacular names corresponding to the input scientific names.
+    """
+
+    df_with_names = add_vernacular_names(
+        lexicon,
+        taxonomy=TAXONOMY.select(["id", "scientificName"]).filter(
+            pl.col("scientificName").is_in(scientific_names)
+        ),
+    )
+    # only take first match for each scientific name
+    df_with_names = df_with_names.group_by("scientificName").agg(
+        pl.first(f"vernacularName_{lexicon}").alias(f"vernacularName_{lexicon}")
+    )
+    # return the vernacular names in the same order as the input scientific names
+    lookup_df = pl.DataFrame({"scientificName": scientific_names})
+    return (
+        lookup_df.join(
+            df_with_names,
+            left_on="scientificName",
+            right_on="scientificName",
+            how="left",
+        )
+        .get_column(f"vernacularName_{lexicon}")
+        .to_list()
+    )
