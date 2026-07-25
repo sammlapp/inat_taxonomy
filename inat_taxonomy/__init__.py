@@ -7,4 +7,5 @@ from inat_taxonomy.taxonomy import (
     list_lexicons,
     add_vernacular_names,
     update_taxonomy,
+    vernacular_names,
 )

@@ -70,17 +70,13 @@ def update_taxonomy() -> None:
     TAXONOMY = df
 
 
-def list_lexicons(normalize: bool = False) -> list[str]:
+def list_lexicons() -> list[str]:
     """
     List all available lexicons in the vernacular names data.
     """
     _download_taxonomy()
     lexicon_files = _DWCA_DIR.glob("VernacularNames-*.csv")
     lexicons = [Path(f).stem.replace("VernacularNames-", "") for f in lexicon_files]
-    if normalize:
-        lexicons = [
-            "".join(filter(str.isalnum, lexicon.lower())) for lexicon in lexicons
-        ]
     return lexicons
 
 
@@ -108,9 +104,11 @@ def add_vernacular_names(lexicon: str, taxonomy: pl.DataFrame = None) -> pl.Data
     _download_taxonomy()
 
     # normalize lexicon to lowercase alphanumeric
-    lexicon = "".join(filter(str.isalnum, lexicon.lower()))
-    assert lexicon in list_lexicons(
-        normalize=True
+    lexicon = lexicon.lower().replace(" ", "-")
+    # remove any characters that are not alphanumeric or hyphens
+    lexicon = "".join(c for c in lexicon if c.isalnum() or c == "-")
+    assert (
+        lexicon in list_lexicons()
     ), f"Lexicon '{lexicon}' not found. Use list_lexicons() for available lexicons."
 
     # read vernacular names
